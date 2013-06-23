@@ -1,6 +1,6 @@
 /*
  * angular-dragon-drop v0.0.1
- * (c) 2013 Brian Ford http://briantford.com
+ * (c) 2013 Brian Ford http://briantford.com, TerryH
  * License: MIT
  */
 
@@ -8,64 +8,34 @@
 
 angular.module('btford.dragon-drop', []).
   directive('btfDragon', function ($document, $compile) {
-    /*
-             ^                       ^
-             |\   \        /        /|
-            /  \  |\__  __/|       /  \
-           / /\ \ \ _ \/ _ /      /    \
-          / / /\ \ {*}\/{*}      /  / \ \
-          | | | \ \( (00) )     /  // |\ \
-          | | | |\ \(V""V)\    /  / | || \| 
-          | | | | \ |^--^| \  /  / || || || 
-         / / /  | |( WWWW__ \/  /| || || ||
-        | | | | | |  \______\  / / || || || 
-        | | | / | | )|______\ ) | / | || ||
-        / / /  / /  /______/   /| \ \ || ||
-       / / /  / /  /\_____/  |/ /__\ \ \ \ \
-       | | | / /  /\______/    \   \__| \ \ \
-       | | | | | |\______ __    \_    \__|_| \
-       | | ,___ /\______ _  _     \_       \  |
-       | |/    /\_____  /    \      \__     \ |    /\
-       |/ |   |\______ |      |        \___  \ |__/  \
-       v  |   |\______ |      |            \___/     |
-          |   |\______ |      |                    __/
-           \   \________\_    _\               ____/
-         __/   /\_____ __/   /   )\_,      _____/
-        /  ___/  \uuuu/  ___/___)    \______/
-        VVV  V        VVV  V 
-    */
-    // this ASCII dragon is really important, do not remove
-
-    var dragValue,
+  // https://github.com/btford/angular-dragon-drop/blob/master/dragon-drop.js#L37
+  // sorry kill the dragon, now dragon in soul
+  var dragValue,
       dragOrigin,
+      dragValueIndex,
+      offsetOrigin,
       floaty;
 
     var drag = function (ev) {
-      var x = ev.clientX,
-        y = ev.clientY;
+      ev.preventDefault();
+      ev.stopPropagation();
 
-      floaty.css('left', x + 10 + 'px');
-      floaty.css('top', y + 10 + 'px');
-    };
+      // normalize the event
+      var orig = ev.originalEvent
+      //console.log(orig);
+      var event = orig.touches ? orig.touches[0] : orig;
 
-    var disableSelect = function () {
-      angular.element(document.body).css({
-        '-moz-user-select': '-moz-none',
-        '-khtml-user-select': 'none',
-        '-webkit-user-select': 'none',
-        '-ms-user-select': 'none',
-        'user-select': 'none'
-      });
-    };
+      var x = event.clientX,
+        y = event.clientY;
 
-    var enableSelect = function () {
-      angular.element(document.body).css({
-        '-moz-user-select': '',
-        '-khtml-user-select': '',
-        '-webkit-user-select': '',
-        '-ms-user-select': '',
-        'user-select': ''
-      });
+      //floaty.css({
+        //top: y - offsetOrigin.y,
+        //left: x - offsetOrigin.x
+      //});
+      //console.log("X: " + x);
+      //console.log("Y: " + y);
+      floaty.css('left', x + 5 + 'px');
+      floaty.css('top', y + 5 + 'px');
     };
 
     return {
@@ -75,6 +45,7 @@ angular.module('btford.dragon-drop', []).
 
         // get the `thing in things` expression
         var expression = attr.btfDragon;
+        var dragLimit = attr.limit;
         var match = expression.match(/^\s*(.+)\s+in\s+(.*?)\s*$/);
         if (!match) {
           throw Error("Expected ngRepeat in form of '_item_ in _collection_' but got '" +
@@ -84,7 +55,7 @@ angular.module('btford.dragon-drop', []).
         var rhs = match[2];
 
         // pull out the template to re-use. Improvised ng-transclude.
-        var template = elt.html();
+        var template = elt.html().trim();
         elt.html('');
         var child = angular.element('<div ng-repeat="' + lhs + ' in ' + rhs + '">' + template + '</div>');
         elt.append(child);
@@ -94,64 +65,87 @@ angular.module('btford.dragon-drop', []).
         var spawnFloaty = function () {
           scope.$apply(function () {
             floaty = angular.element('<div style="position: fixed;">' + template + '</div>');
-            var floatyScope = scope.$new();
-            floatyScope[lhs] = dragValue;
-            $compile(floaty)(floatyScope);
-            angular.element(document.body).append(floaty);
+            floaty.css({"z-index":1});
+            // clearance check
+            if (dragValue) {
+              var floatyScope = scope.$new();
+              floatyScope[lhs] = dragValue;
+              $compile(floaty)(floatyScope);
+              angular.element(document.body).append(floaty);
+
+            }
           });
 
-          $document.bind('mousemove', drag);
+          $document.bind('touchmove mousemove', drag);
+          //floaty.bind('touchmove mousemove', drag);
         };
 
         var killFloaty = function () {
-          $document.unbind('mousemove', drag);
+          $document.unbind('touchmove mousemove', drag);
+          //floaty.bind('touchmove mousemove', drag);
           if (floaty) {
             floaty.remove();
             floaty = null;
           }
         };
 
-        elt.bind('mousedown', function (ev) {
+        elt.bind('touchstart mousedown', function (ev) {
           if (dragValue) {
             return;
           }
+          // normalize the event
+          var orig = ev.originalEvent
+          var event = orig.touches ? orig.touches[0] : orig;
+
+          var targetElem = angular.element(ev.target);
           scope.$apply(function () {
             var targetScope = angular.element(ev.target).scope();
             var value = dragValue = targetScope[lhs];
-            //console.log(value);
-            var list = scope.$eval(rhs);
-            dragOrigin = list;
-            list.splice(list.indexOf(value), 1);
+            console.log("Scope value "+ value);
+            if(value){
+              // count offset
+              var orig = targetElem.position();
+
+              offsetOrigin = {
+                x: event.pageX - orig.left,
+                y: event.pageY - orig.top
+              }
+
+              var list = scope.$eval(rhs);
+              dragOrigin = list;
+              var valueIndex = dragValueIndex = list.indexOf(value);
+              list.splice(list.indexOf(value), 1);
+            }
           });
-          disableSelect();
           spawnFloaty();
           drag(ev);
         });
 
         // handle something being dropped here
-        elt.bind('mouseup', function (ev) {
+        elt.bind('touchend mouseup', function (ev) {
           if (dragValue) {
             scope.$apply(function () {
               var list = scope.$eval(rhs);
               list.push(dragValue);
-              dragValue = dragOrigin = null;
+              console.log("END pushto "+ dragValue);
+              dragValue = dragOrigin = offsetOrigin = null;
             });
           }
-          enableSelect();
           killFloaty();
         });
 
         // else, the event bubbles up to document
-        $document.bind('mouseup', function (ev) {
-          if (dragValue) {
-            scope.$apply(function () {
-              dragOrigin.push(dragValue);
-              dragValue = dragOrigin = null;
-            });
-            enableSelect();
-            killFloaty();
-          }
-        });
+        //$document.bind('touchend mouseup', function (ev) {
+          //console.log("Document END", dragValue);
+          //if (dragValue) {
+            //scope.$apply(function () {
+              ////dragOrigin.push(dragValue);
+              //dragOrigin.splice(dragValueIndex, 0, dragValue);
+              //dragValue = dragOrigin = offsetOrigin  = null;
+            //});
+            //killFloaty();
+          //}
+        //});
 
       }
     };
